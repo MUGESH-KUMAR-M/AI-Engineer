@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "e:\AI-Engineer\test_llm.py", line 12, in <module>
+    result = answer('What is the attendance policy?')
+  File "e:\AI-Engineer\backend\rag\pipeline.py", line 59, in answer
+    embedder = _get_embedder()
+  File "e:\AI-Engineer\backend\rag\pipeline.py", line 25, in _get_embedder
+    _embedder = Embedder()
+  File "e:\AI-Engineer\backend\rag\embedder.py", line 40, in __init__
+    from sentence_transformers import SentenceTransformer
+ModuleNotFoundError: No module named 'sentence_transformers'

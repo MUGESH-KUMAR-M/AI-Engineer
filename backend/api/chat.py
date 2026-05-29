@@ -40,9 +40,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
             for s in result.get("sources", [])
         ]
         return ChatResponse(answer=result["answer"], sources=sources)
-    except Exception:
+    except Exception as e:
         logger.exception("Unhandled error in /api/chat")
         raise HTTPException(
             status_code=500,
-            detail="An internal error occurred while processing your question.",
+            detail=f"An internal error occurred: {str(e)}",
         )

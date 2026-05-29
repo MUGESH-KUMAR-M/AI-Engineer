@@ -152,6 +152,7 @@ def ask_llm(question: str, context_chunks: list[dict[str, Any]]) -> str:
     """Send the user question plus context to LLM and return the answer.
 
     Supports multiple LLM providers based on MODEL_PROVIDER setting.
+    Falls back to Groq if the primary provider fails.
 
     Parameters
     ----------
@@ -174,6 +175,7 @@ def ask_llm(question: str, context_chunks: list[dict[str, Any]]) -> str:
         settings.MODEL_PROVIDER,
     )
 
+    # Try primary provider
     try:
         if settings.MODEL_PROVIDER == "anthropic":
             answer = _ask_anthropic(question, context_text, settings)
@@ -192,5 +194,21 @@ def ask_llm(question: str, context_chunks: list[dict[str, Any]]) -> str:
         return answer
 
     except Exception as e:
-        logger.exception("LLM API call failed for provider %s", settings.MODEL_PROVIDER)
-        raise
+        # If primary provider fails, try Groq as fallback (if not already the primary)
+        if settings.MODEL_PROVIDER != "groq" and settings.GROQ_API_KEY:
+            logger.warning(
+                "Primary provider %s failed (%s). Falling back to Groq.",
+                settings.MODEL_PROVIDER,
+                str(e),
+            )
+            try:
+                answer = _ask_groq(question, context_text, settings)
+                logger.info("Groq fallback succeeded. LLM responded (%d chars).", len(answer))
+                return answer
+            except Exception as groq_error:
+                logger.exception("Groq fallback also failed")
+                raise groq_error
+        else:
+            # No fallback available or already using Groq
+            logger.exception("LLM API call failed for provider %s", settings.MODEL_PROVIDER)
+            raise
