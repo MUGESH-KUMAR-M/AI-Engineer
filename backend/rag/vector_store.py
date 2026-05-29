@@ -94,15 +94,49 @@ class VectorStore:
         results = self._collection.query(
             query_embeddings=[query_embedding],
             n_results=k,
+            include=["documents", "metadatas", "distances"],
         )
 
+        threshold = settings.SIMILARITY_THRESHOLD
         documents: list[dict[str, Any]] = []
-        # Chroma returns lists-of-lists; we only sent one query.
-        for text, meta in zip(
+
+        for text, meta, distance in zip(
             results["documents"][0],
             results["metadatas"][0],
+            results["distances"][0],
         ):
-            documents.append({"text": text, "metadata": meta})
+            if distance is not None and distance > threshold:
+                logger.debug(
+                    "Skipping chunk (distance=%.3f > %.3f): %s",
+                    distance,
+                    threshold,
+                    meta.get("source_filename"),
+                )
+                continue
+            documents.append(
+                {
+                    "text": text,
+                    "metadata": meta,
+                    "distance": distance,
+                }
+            )
 
-        logger.info("Vector search returned %d result(s).", len(documents))
+        # If threshold filtered everything, keep top 2 anyway (avoid empty context)
+        if not documents and results["documents"][0]:
+            logger.warning(
+                "All chunks exceeded distance threshold; using top 2 unfiltered."
+            )
+            for text, meta, distance in zip(
+                results["documents"][0][:2],
+                results["metadatas"][0][:2],
+                results["distances"][0][:2],
+            ):
+                documents.append(
+                    {"text": text, "metadata": meta, "distance": distance}
+                )
+
+        logger.info(
+            "Vector search returned %d result(s) after distance filter.",
+            len(documents),
+        )
         return documents

@@ -1,18 +1,51 @@
-export default function Header() {
+import { Cpu, Database, Sparkles } from 'lucide-react';
+
+export default function Header({ systemStatus }) {
+  const rag = systemStatus?.rag;
+  const llm = systemStatus?.llm;
+  const ollama = systemStatus?.ollama;
+
+  const isOnline =
+    systemStatus?.status === 'ok' ||
+    (rag?.chunks > 0 && llm?.ready);
+
+  const statusLabel = isOnline
+    ? llm?.provider === 'ollama'
+      ? `Ollama · ${llm?.model || 'local'}`
+      : 'Online'
+    : 'Connecting…';
+
   return (
     <header className="header">
       <div className="header-logo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-        </svg>
+        <Sparkles size={22} strokeWidth={2} />
       </div>
       <div className="header-text">
         <div className="header-title">SWS AI Assistant</div>
-        <div className="header-subtitle">Company Policy Chatbot</div>
+        <div className="header-subtitle">RAG-Powered Company Policy Chatbot</div>
       </div>
-      <div className="header-status">
+
+      <div className="header-metrics">
+        {rag && (
+          <div className="header-metric" title="Indexed document chunks">
+            <Database size={14} />
+            <span>{rag.chunks} chunks</span>
+          </div>
+        )}
+        {llm?.provider === 'ollama' && (
+          <div
+            className={`header-metric ${ollama?.model_ready ? 'ready' : 'warn'}`}
+            title="Local LLM via Ollama"
+          >
+            <Cpu size={14} />
+            <span>{ollama?.model_ready ? 'Ollama' : 'Ollama starting'}</span>
+          </div>
+        )}
+      </div>
+
+      <div className={`header-status ${isOnline ? 'online' : 'offline'}`}>
         <div className="header-status-dot" />
-        <span className="header-status-text">Online</span>
+        <span className="header-status-text">{statusLabel}</span>
       </div>
     </header>
   );

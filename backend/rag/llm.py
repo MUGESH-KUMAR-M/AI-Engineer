@@ -14,11 +14,13 @@ from backend.config.settings import get_settings
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
-    "You are a helpful SWS AI company policy assistant. "
-    "Answer ONLY using the context provided below. "
-    "If the answer is not found in the provided documents, respond exactly: "
-    "I don't have that information in the company documents. "
-    "Always be precise and mention which document your answer comes from."
+    "You are the SWS AI company policy assistant. "
+    "Rules:\n"
+    "1. Answer ONLY from the Context sections below — never invent facts.\n"
+    "2. If the answer is not in the context, respond exactly: "
+    "I don't have that information in the company documents.\n"
+    "3. Be concise, professional, and cite the source document name.\n"
+    "4. Use bullet points for lists when helpful."
 )
 
 
@@ -72,8 +74,10 @@ def _ask_openai(question: str, context_text: str, settings) -> str:
     response = client.chat.completions.create(
         model=settings.MODEL_NAME,
         max_tokens=1024,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
     )
     return response.choices[0].message.content
 
@@ -100,28 +104,48 @@ def _ask_groq(question: str, context_text: str, settings) -> str:
     response = client.chat.completions.create(
         model=settings.MODEL_NAME,
         max_tokens=1024,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
     )
     return response.choices[0].message.content
 
 
+def _ollama_model_name(settings) -> str:
+    """Resolve Ollama model tag (e.g. llama3 -> llama3:latest)."""
+    name = settings.MODEL_NAME.replace("ollama-", "")
+    if ":" not in name:
+        name = f"{name}:latest"
+    return name
+
+
 def _ask_ollama(question: str, context_text: str, settings) -> str:
-    """Call Ollama local model API."""
+    """Call Ollama chat API (local LLM)."""
     import requests
-    
-    prompt = f"{_SYSTEM_PROMPT}\n\nContext:\n{context_text}\n\nQuestion: {question}"
-    
+
+    model = _ollama_model_name(settings)
+    user_message = f"Context:\n{context_text}\n\nQuestion: {question}"
+
     response = requests.post(
-        f"{settings.OLLAMA_API_URL}/api/generate",
+        f"{settings.OLLAMA_API_URL.rstrip('/')}/api/chat",
         json={
-            "model": settings.MODEL_NAME.replace("ollama-", ""),
-            "prompt": prompt,
+            "model": model,
             "stream": False,
+            "messages": [
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            "options": {
+                "temperature": 0.1,
+                "num_predict": 1024,
+            },
         },
+        timeout=settings.OLLAMA_TIMEOUT,
     )
     response.raise_for_status()
-    return response.json()["response"]
+    data = response.json()
+    return data.get("message", {}).get("content", "").strip()
 
 
 def ask_llm(question: str, context_chunks: list[dict[str, Any]]) -> str:

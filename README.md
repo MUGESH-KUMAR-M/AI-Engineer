@@ -59,7 +59,9 @@ GOOGLE_API_KEY=your-key
 
 ---
 
-## 📊 Features
+## 📊 Project Structure
+
+```
 AI-Engineer/
 ├── .env.example              # Environment variable template
 ├── .gitignore                 # Git ignore rules
@@ -116,6 +118,7 @@ AI-Engineer/
 │           └── api.js         # Fetch wrapper for /api/chat
 └── data/
     └── chroma_db/             # ChromaDB persistent storage (auto-created)
+###
 ```
 
 ---
@@ -246,13 +249,55 @@ Response: {
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | React 19, Vite 6, Vanilla CSS |
+| **Frontend** | React 19, Vite 6, Livvic font, white/blue UI |
 | **Backend** | Python 3.11+, FastAPI |
-| **Embeddings** | OpenAI `text-embedding-3-small` |
+| **Embeddings** | HuggingFace `all-MiniLM-L6-v2` (local) or OpenAI `text-embedding-3-small` |
 | **Vector Store** | ChromaDB (persistent local) |
-| **LLM** | Anthropic Claude (`claude-sonnet-4-20250514`) |
+| **LLM** | Groq `llama-3.3-70b-versatile` (also supports Claude, Gemini, OpenAI, Ollama) |
 | **PDF Parsing** | PyMuPDF (fitz) |
 | **Text Splitting** | LangChain `RecursiveCharacterTextSplitter` |
+
+---
+
+## 🏗️ Architecture Decisions
+
+### Vector database: ChromaDB
+
+Chroma was chosen for local, zero-ops persistence (`data/chroma_db/`). It needs no Docker or cloud account, fits a 3–4 hour assessment timeline, and exposes a simple upsert + cosine-similarity query API. Pinecone/FAISS are viable alternatives; Chroma keeps the prototype self-contained.
+
+### Chunking: `RecursiveCharacterTextSplitter`
+
+- **chunk_size=500**, **chunk_overlap=50** (per assessment spec)
+- Splits on paragraph/sentence boundaries before hard-cutting, which keeps policy clauses intact
+- Each chunk keeps `source_filename` + `page_number` for citation in the UI
+
+### Embeddings: HuggingFace `all-MiniLM-L6-v2`
+
+Runs locally with no API key (384-dim vectors, fast on CPU). OpenAI `text-embedding-3-small` is supported via `EMBEDDING_PROVIDER=openai` when higher quality is needed. **Important:** query and document embeddings must use the same model.
+
+### Retrieval: top-k = 4
+
+`TOP_K=4` balances context breadth vs. token limits. For narrow factual questions (e.g. sick leave days), rank-1 chunks are usually sufficient; for broad questions (e.g. WFH guidelines), 4 chunks pull related sections across pages.
+
+Test retrieval without the LLM:
+
+```bash
+python scripts/test_retrieval.py "What is the leave policy?"
+```
+
+### Prompt design
+
+The system prompt instructs the model to:
+
+1. Answer **only** from numbered context blocks (filename + page per chunk)
+2. Return exactly: *"I don't have that information in the company documents."* when context is insufficient
+3. Cite which document the answer comes from
+
+Context is formatted as `[1] (Source: file.pdf, Page N)\n<text>` so the model can attribute sources; the API also returns structured `sources` for the UI chips.
+
+### LLM: Groq (Llama 3.3 70B)
+
+Fast, free-tier friendly for demos. Swap via `.env`: `MODEL_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`, or `ollama` for fully local inference.
 
 ---
 

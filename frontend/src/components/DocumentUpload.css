@@ -28,12 +28,25 @@
 }
 
 .upload-icon {
-  width: 64px;
-  height: 64px;
-  color: #0066cc;
+  color: #2563eb;
   margin-bottom: 16px;
   opacity: 0.9;
-  stroke-width: 1.5;
+}
+
+.spin-inline {
+  animation: spin 1s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.upload-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .upload-area h3 {

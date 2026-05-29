@@ -10,3 +10,19 @@ export async function sendMessage(question) {
   }
   return response.json();
 }
+
+export async function fetchSystemStatus() {
+  const response = await fetch('/api/status');
+  if (!response.ok) {
+    throw new Error('Status unavailable');
+  }
+  return response.json();
+}
+
+export async function fetchIngestStatus() {
+  const response = await fetch('/api/ingest-status');
+  if (!response.ok) {
+    throw new Error('Ingest status unavailable');
+  }
+  return response.json();
+}

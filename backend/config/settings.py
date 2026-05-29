@@ -33,10 +33,12 @@ class Settings(BaseSettings):
     # Model Configuration
     CHROMA_PATH: str = "./data/chroma_db"
     TOP_K: int = 4
-    MODEL_NAME: str = "gemini-2.0-flash"
-    MODEL_PROVIDER: str = "gemini"  # Options: openai, anthropic, gemini, groq, ollama
-    EMBEDDING_PROVIDER: str = "huggingface"  # Options: openai, huggingface (default: huggingface - no key needed)
+    MODEL_NAME: str = "llama3"
+    MODEL_PROVIDER: str = "ollama"  # Options: openai, anthropic, gemini, groq, ollama
+    EMBEDDING_PROVIDER: str = "huggingface"  # Options: openai, huggingface
     PDF_DIR: str = "./Docs"
+    OLLAMA_TIMEOUT: int = 120
+    SIMILARITY_THRESHOLD: float = 1.2  # Max L2 distance; higher = more permissive
 
 
 @lru_cache
