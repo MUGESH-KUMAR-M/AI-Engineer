@@ -160,28 +160,10 @@ export default function App() {
           </>
         ) : (
           <div className="upload-tab">
-            <DocumentUpload onUploadSuccess={handleUploadSuccess} />
-            {ingestionStats && (
-              <div className="stats-panel">
-                <h3>Knowledge base</h3>
-                <div className="stats-grid">
-                  <div className="stat-card">
-                    <span className="stat-value">{ingestionStats.total_chunks}</span>
-                    <span className="stat-label">Indexed chunks</span>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-value">10</span>
-                    <span className="stat-label">Policy PDFs</span>
-                  </div>
-                  <div className="stat-card highlight">
-                    <span className="stat-value">RAG</span>
-                    <span className="stat-label">
-                      {systemStatus?.llm?.provider || 'Chroma'} RAG
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
+            <DocumentUpload
+              onUploadSuccess={handleUploadSuccess}
+              ingestionStats={ingestionStats}
+            />
           </div>
         )}
       </main>

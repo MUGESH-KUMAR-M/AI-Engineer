@@ -13,9 +13,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.chat import router as chat_router
-from backend.api.providers import router as providers_router
+from backend.api.providers import (
+    configure_provider,
+    list_providers,
+    router as providers_router,
+)
 from backend.api.status import router as status_router
-from backend.api.upload import router as upload_router
+from backend.api.upload import (
+    router as upload_router,
+    upload_bulk,
+    upload_document,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -54,6 +62,17 @@ app.include_router(upload_router)
 app.include_router(status_router)
 app.include_router(providers_router)
 
+# Explicit routes (ensures providers work even if an old worker cached routers)
+app.add_api_route("/api/providers", list_providers, methods=["GET"], tags=["providers"])
+app.add_api_route(
+    "/api/providers/configure",
+    configure_provider,
+    methods=["POST"],
+    tags=["providers"],
+)
+app.add_api_route("/api/upload", upload_document, methods=["POST"], tags=["upload"])
+app.add_api_route("/api/upload/bulk", upload_bulk, methods=["POST"], tags=["upload"])
+
 
 # ---------------------------------------------------------------------------
 # Health check
@@ -71,3 +90,5 @@ async def health() -> dict[str, str]:
 async def _on_startup() -> None:
     logger.info("🚀 SWS AI RAG Chatbot API is starting up …")
     logger.info("Health-check available at GET /api/health")
+    logger.info("Provider settings: GET /api/providers, POST /api/providers/configure")
+    logger.info("Upload: POST /api/upload, POST /api/upload/bulk")

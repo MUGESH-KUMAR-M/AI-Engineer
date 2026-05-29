@@ -1292,12 +1292,10 @@ a { text-decoration: none; color: inherit; }
 .upload-tab {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  max-width: var(--max-chat-width);
-  margin: 0 auto;
+  background: var(--bg);
   width: 100%;
 }
 

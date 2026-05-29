@@ -42,6 +42,36 @@ export async function fetchProviders() {
   return response.json();
 }
 
+export async function uploadSingle(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(apiUrl('/api/upload'), {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Upload failed');
+  }
+  return response.json();
+}
+
+export async function uploadBulk(files) {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append('files', file);
+  }
+  const response = await fetch(apiUrl('/api/upload/bulk'), {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Bulk upload failed');
+  }
+  return response.json();
+}
+
 export async function configureProvider({ provider, model, api_key }) {
   const response = await fetch(apiUrl('/api/providers/configure'), {
     method: 'POST',
