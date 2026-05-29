@@ -1,5 +1,12 @@
+const API_BASE =
+  import.meta.env.VITE_API_BASE?.replace(/\/$/, '') || 'http://127.0.0.1:8010';
+
+function apiUrl(path) {
+  return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 export async function sendMessage(question) {
-  const response = await fetch('/api/chat', {
+  const response = await fetch(apiUrl('/api/chat'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question }),
@@ -12,7 +19,7 @@ export async function sendMessage(question) {
 }
 
 export async function fetchSystemStatus() {
-  const response = await fetch('/api/status');
+  const response = await fetch(apiUrl('/api/status'));
   if (!response.ok) {
     throw new Error('Status unavailable');
   }
@@ -20,7 +27,7 @@ export async function fetchSystemStatus() {
 }
 
 export async function fetchIngestStatus() {
-  const response = await fetch('/api/ingest-status');
+  const response = await fetch(apiUrl('/api/ingest-status'));
   if (!response.ok) {
     throw new Error('Ingest status unavailable');
   }
