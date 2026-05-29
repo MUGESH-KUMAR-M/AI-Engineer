@@ -3,12 +3,13 @@
 A **production-ready Retrieval-Augmented Generation (RAG)** chatbot that lets employees ask natural-language questions about company policies and receive accurate, source-cited answers from internal PDF documents.
 
 **Features:**
-- ✅ 10 SWS AI company policy PDFs pre-ingested (HR, leave, IT security, etc.)
-- ✅ **Document upload** - Add new PDFs dynamically without restarting
-- ✅ **Multiple LLM support** - Gemini, Groq, Claude, OpenAI, Ollama
-- ✅ **Local embeddings** - HuggingFace (no API key needed)
-- ✅ **Production-ready** - Error handling, logging, async processing
-- ✅ **Beautiful UI** - React 19 + Vite with glassmorphism design
+- ✅ 10 SWS AI company policy PDFs (HR, leave, IT security, etc.)
+- ✅ **RAG pipeline** — ChromaDB + HuggingFace embeddings + grounded LLM answers
+- ✅ **Default: Ollama (local)** — no API key required
+- ✅ **Switch LLM in UI** — OpenAI, Anthropic, Gemini, Groq (paste API key → Apply)
+- ✅ **Document upload** — add PDFs without restart
+- ✅ **Docker** — `docker compose up` for backend + frontend
+- ✅ **Modern React UI** — Livvic font, settings panel, source citations
 
 ---
 
@@ -61,9 +62,55 @@ PDF_DIR=./Docs
 
 ---
 
+## 🤖 Switching LLM Providers (UI)
+
+1. Click **Model** in the header (top right).
+2. Choose a provider: **Ollama** (default), **OpenAI**, **Anthropic**, **Gemini**, or **Groq**.
+3. Select a model from the dropdown.
+4. For cloud providers, paste your **API key** and click **Apply model**.
+
+Keys are saved locally in `data/runtime_config.json` (gitignored). You can also set keys in `.env`.
+
+| Provider | API key env var | Example models |
+|----------|-----------------|----------------|
+| Ollama | — | `phi3`, `llama3` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini`, `gpt-4o` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` |
+| Gemini | `GOOGLE_API_KEY` | `gemini-2.0-flash` |
+| Groq | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+
+---
+
+## 🐳 Docker
+
+```bash
+# From project root
+docker compose up --build
+
+# UI:  http://localhost:5173
+# API: http://localhost:8000/api/health
+```
+
+**First run — ingest PDFs inside the backend container:**
+
+```bash
+docker compose exec backend python -m backend.ingest
+```
+
+**Optional — run Ollama in Docker:**
+
+```bash
+docker compose --profile ollama up -d ollama
+docker compose exec ollama ollama pull phi3
+```
+
+Set in `.env` for Docker + Ollama profile: `OLLAMA_API_URL=http://ollama:11434`
+
+---
+
 ## 📊 Project Structure
 
-````
+```
 AI-Engineer/
 ├── .env.example              # Environment variable template
 ├── .gitignore                 # Git ignore rules
@@ -100,7 +147,9 @@ AI-Engineer/
 │   │   └── pipeline.py        # End-to-end RAG orchestration
 │   └── api/
 │       ├── __init__.py
-│       └── chat.py            # POST /api/chat endpoint
+│       ├── chat.py            # POST /api/chat
+│       ├── providers.py       # GET/POST provider config
+│       └── status.py          # GET /api/status
 ├── frontend/
 │   ├── index.html             # HTML entry with Livvic font
 │   ├── package.json           # Node dependencies
@@ -120,8 +169,7 @@ AI-Engineer/
 │           └── api.js         # Fetch wrapper for /api/chat
 └── data/
     └── chroma_db/             # ChromaDB persistent storage (auto-created)
-
-````
+```
 
 ---
 
@@ -293,23 +341,23 @@ The system prompt instructs the model to:
 
 Context is formatted as `[1] (Source: file.pdf, Page N)\n<text>` so the model can attribute sources; the API also returns structured `sources` for the UI chips.
 
-### LLM: Local Ollama (phi3) + pluggable providers
+### LLM: Ollama default + runtime provider switching
 
-- **Default:** `MODEL_PROVIDER=ollama`, `MODEL_NAME=phi3` (runs fully local via Ollama)
-- **Switching provider:** update `.env` to e.g.:
-  - `MODEL_PROVIDER=groq`, `MODEL_NAME=llama-3.3-70b-versatile`, `GROQ_API_KEY=...`
-  - `MODEL_PROVIDER=openai`, `MODEL_NAME=gpt-4.1-mini`, `OPENAI_API_KEY=...`
-  - `MODEL_PROVIDER=anthropic`, `MODEL_NAME=claude-3.7-sonnet`, `ANTHROPIC_API_KEY=...`
-- The RAG pipeline (`backend/rag/pipeline.py`) does not change when swapping LLMs.
+- **Default:** Ollama `phi3` — fully local, no API key.
+- **Runtime overrides:** `POST /api/providers/configure` + Settings UI; persisted in `data/runtime_config.json`.
+- **Fallback:** If the active provider fails and `GROQ_API_KEY` is set, Groq is tried automatically.
+- Retrieval (`pipeline.py`) is unchanged when swapping LLMs — only the generation step changes.
 
 ---
 
 ## 🧩 Assumptions & Notes
 
-- **Docs folder:** The 10 SWS AI PDFs live under `Docs/` and are treated as the single source of truth.
-- **Grounded answers:** If relevant chunks are not found or are too far in vector space, the LLM is instructed to reply: *“I don't have that information in the company documents.”*
-- **Local-first:** Default configuration assumes **no cloud API keys** and runs everything locally (HuggingFace embeddings + Ollama LLM + ChromaDB).
-- **Ports:** Backend on `8010`, frontend on `5173`, with Vite dev proxy pointing `/api` to the backend.
+- **Docs folder:** The 10 SWS AI PDFs in `Docs/` are the source of truth for answers.
+- **Grounded answers:** The LLM must answer only from retrieved chunks; otherwise it returns the exact fallback string from the prompt.
+- **Local-first:** Default stack is HuggingFace embeddings + Chroma + Ollama — no cloud keys required.
+- **API keys in UI:** Stored in `data/runtime_config.json` for local dev only; use `.env` or secrets in production.
+- **Dev ports:** Backend `8010` (or `8000` in Docker), frontend `5173`; set `VITE_API_BASE` in `frontend/.env` if not using the Vite proxy.
+- **First Ollama request** may be slow while the model loads into memory.
 
 ---
 

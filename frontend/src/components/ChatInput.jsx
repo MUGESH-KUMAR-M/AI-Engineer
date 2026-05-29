@@ -57,7 +57,7 @@ export default function ChatInput({ onSend, disabled }) {
         </button>
       </div>
       <p className="chat-input-hint">
-        Answers are grounded in your 10 company policy PDFs · Powered by local Ollama RAG
+        Grounded in company policy PDFs · Switch model via <strong>Model</strong> in the header
       </p>
     </div>
   );

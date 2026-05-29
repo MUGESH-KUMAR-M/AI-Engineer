@@ -6,6 +6,7 @@ import {
   Upload,
   AlertTriangle,
 } from 'lucide-react';
+import { apiUrl } from '../services/api';
 import './DocumentUpload.css';
 
 export default function DocumentUpload({ onUploadSuccess }) {
@@ -48,7 +49,7 @@ export default function DocumentUpload({ onUploadSuccess }) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await fetch('/api/upload', {
+      const response = await fetch(apiUrl('/api/upload'), {
         method: 'POST',
         body: formData,
       });
