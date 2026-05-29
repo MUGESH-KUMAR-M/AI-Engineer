@@ -67,6 +67,26 @@ export async function uploadFiles(files) {
     });
   }
 
+  // Old backend: single-file handler only — upload one at a time
+  if (!response.ok && list.length > 1 && (response.status === 422 || response.status === 400)) {
+    const results = [];
+    for (const f of list) {
+      const single = new FormData();
+      single.append('file', f);
+      const r = await fetch(apiUrl('/api/upload'), { method: 'POST', body: single });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.detail || `Upload failed for ${f.name}`);
+      }
+      results.push(await r.json());
+    }
+    return {
+      accepted: results.length,
+      files: list.map((f) => ({ filename: f.name, status: 'queued' })),
+      message: `${results.length} file(s) queued (sequential upload).`,
+    };
+  }
+
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     const detail = err.detail;

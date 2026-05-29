@@ -2,10 +2,10 @@
 $port = 8010
 $conns = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty OwningProcess -Unique
-foreach ($pid in $conns) {
-    if ($pid -gt 0) {
-        Write-Host "Stopping process on port $port (PID $pid)..."
-        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+foreach ($procId in $conns) {
+    if ($procId -gt 0) {
+        Write-Host "Stopping process on port $port (PID $procId)..."
+        Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
     }
 }
 Start-Sleep -Seconds 2
