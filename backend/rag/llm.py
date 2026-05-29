@@ -2,14 +2,14 @@
 LLM interaction layer supporting multiple providers.
 
 Supports: Anthropic Claude, OpenAI, Google Gemini, Groq, and Ollama.
-Builds a structured prompt from retrieved context chunks and calls
-the selected LLM model to generate a grounded answer.
+Uses effective config from .env + runtime UI overrides.
 """
 
 import logging
+from types import SimpleNamespace
 from typing import Any
 
-from backend.config.settings import get_settings
+from backend.config.llm_config import EffectiveLLMConfig, get_effective_llm_config
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +25,6 @@ _SYSTEM_PROMPT = (
 
 
 def _build_context_block(chunks: list[dict[str, Any]]) -> str:
-    """Format retrieved chunks into a numbered context block.
-
-    Parameters
-    ----------
-    chunks:
-        Each dict must have ``text`` and ``metadata`` keys.
-
-    Returns
-    -------
-    str
-        A human-readable, numbered context string.
-    """
     lines: list[str] = []
     for idx, chunk in enumerate(chunks, start=1):
         meta = chunk["metadata"]
@@ -48,13 +36,25 @@ def _build_context_block(chunks: list[dict[str, Any]]) -> str:
     return "\n\n".join(lines)
 
 
+def _as_settings(cfg: EffectiveLLMConfig) -> SimpleNamespace:
+    """Adapt EffectiveLLMConfig for provider helpers."""
+    return SimpleNamespace(
+        MODEL_NAME=cfg.model,
+        MODEL_PROVIDER=cfg.provider,
+        OPENAI_API_KEY=cfg.openai_api_key,
+        ANTHROPIC_API_KEY=cfg.anthropic_api_key,
+        GOOGLE_API_KEY=cfg.google_api_key,
+        GROQ_API_KEY=cfg.groq_api_key,
+        OLLAMA_API_URL=cfg.ollama_api_url,
+        OLLAMA_TIMEOUT=cfg.ollama_timeout,
+    )
+
+
 def _ask_anthropic(question: str, context_text: str, settings) -> str:
-    """Call Anthropic Claude API."""
     import anthropic
-    
+
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     user_message = f"Context:\n{context_text}\n\nQuestion: {question}"
-    
     response = client.messages.create(
         model=settings.MODEL_NAME,
         max_tokens=1024,
@@ -65,12 +65,10 @@ def _ask_anthropic(question: str, context_text: str, settings) -> str:
 
 
 def _ask_openai(question: str, context_text: str, settings) -> str:
-    """Call OpenAI API."""
     import openai
-    
+
     client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
     user_message = f"Context:\n{context_text}\n\nQuestion: {question}"
-    
     response = client.chat.completions.create(
         model=settings.MODEL_NAME,
         max_tokens=1024,
@@ -83,24 +81,20 @@ def _ask_openai(question: str, context_text: str, settings) -> str:
 
 
 def _ask_gemini(question: str, context_text: str, settings) -> str:
-    """Call Google Gemini API."""
     import google.generativeai as genai
-    
+
     genai.configure(api_key=settings.GOOGLE_API_KEY)
     model = genai.GenerativeModel(settings.MODEL_NAME)
-    
     prompt = f"{_SYSTEM_PROMPT}\n\nContext:\n{context_text}\n\nQuestion: {question}"
     response = model.generate_content(prompt, stream=False)
     return response.text
 
 
 def _ask_groq(question: str, context_text: str, settings) -> str:
-    """Call Groq API."""
     from groq import Groq
-    
+
     client = Groq(api_key=settings.GROQ_API_KEY)
     user_message = f"Context:\n{context_text}\n\nQuestion: {question}"
-    
     response = client.chat.completions.create(
         model=settings.MODEL_NAME,
         max_tokens=1024,
@@ -113,7 +107,6 @@ def _ask_groq(question: str, context_text: str, settings) -> str:
 
 
 def _ollama_model_name(settings) -> str:
-    """Resolve Ollama model tag (e.g. llama3 -> llama3:latest)."""
     name = settings.MODEL_NAME.replace("ollama-", "")
     if ":" not in name:
         name = f"{name}:latest"
@@ -121,12 +114,10 @@ def _ollama_model_name(settings) -> str:
 
 
 def _ask_ollama(question: str, context_text: str, settings) -> str:
-    """Call Ollama chat API (local LLM)."""
     import requests
 
     model = _ollama_model_name(settings)
     user_message = f"Context:\n{context_text}\n\nQuestion: {question}"
-
     response = requests.post(
         f"{settings.OLLAMA_API_URL.rstrip('/')}/api/chat",
         json={
@@ -136,79 +127,64 @@ def _ask_ollama(question: str, context_text: str, settings) -> str:
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
             ],
-            "options": {
-                "temperature": 0.1,
-                "num_predict": 1024,
-            },
+            "options": {"temperature": 0.1, "num_predict": 1024},
         },
         timeout=settings.OLLAMA_TIMEOUT,
     )
     response.raise_for_status()
-    data = response.json()
-    return data.get("message", {}).get("content", "").strip()
+    return response.json().get("message", {}).get("content", "").strip()
+
+
+def _call_provider(cfg: EffectiveLLMConfig, question: str, context_text: str) -> str:
+    settings = _as_settings(cfg)
+    provider = cfg.provider
+
+    if provider == "anthropic":
+        return _ask_anthropic(question, context_text, settings)
+    if provider == "openai":
+        return _ask_openai(question, context_text, settings)
+    if provider == "gemini":
+        return _ask_gemini(question, context_text, settings)
+    if provider == "groq":
+        return _ask_groq(question, context_text, settings)
+    if provider == "ollama":
+        return _ask_ollama(question, context_text, settings)
+    raise ValueError(f"Unknown provider: {provider}")
 
 
 def ask_llm(question: str, context_chunks: list[dict[str, Any]]) -> str:
-    """Send the user question plus context to LLM and return the answer.
-
-    Supports multiple LLM providers based on MODEL_PROVIDER setting.
-    Falls back to Groq if the primary provider fails.
-
-    Parameters
-    ----------
-    question:
-        The end-user's natural-language question.
-    context_chunks:
-        Retrieved document chunks from the vector store.
-
-    Returns
-    -------
-    str
-        The model's generated answer text.
-    """
-    settings = get_settings()
+    cfg = get_effective_llm_config()
     context_text = _build_context_block(context_chunks)
 
-    logger.debug(
-        "Sending prompt to %s (provider: %s) …",
-        settings.MODEL_NAME,
-        settings.MODEL_PROVIDER,
+    logger.info(
+        "LLM request — provider=%s model=%s",
+        cfg.provider,
+        cfg.model,
     )
 
-    # Try primary provider
     try:
-        if settings.MODEL_PROVIDER == "anthropic":
-            answer = _ask_anthropic(question, context_text, settings)
-        elif settings.MODEL_PROVIDER == "openai":
-            answer = _ask_openai(question, context_text, settings)
-        elif settings.MODEL_PROVIDER == "gemini":
-            answer = _ask_gemini(question, context_text, settings)
-        elif settings.MODEL_PROVIDER == "groq":
-            answer = _ask_groq(question, context_text, settings)
-        elif settings.MODEL_PROVIDER == "ollama":
-            answer = _ask_ollama(question, context_text, settings)
-        else:
-            raise ValueError(f"Unknown provider: {settings.MODEL_PROVIDER}")
-
+        answer = _call_provider(cfg, question, context_text)
         logger.info("LLM responded (%d chars).", len(answer))
         return answer
-
-    except Exception as e:
-        # If primary provider fails, try Groq as fallback (if not already the primary)
-        if settings.MODEL_PROVIDER != "groq" and settings.GROQ_API_KEY:
+    except Exception as primary_error:
+        if cfg.provider != "groq" and cfg.groq_api_key:
             logger.warning(
-                "Primary provider %s failed (%s). Falling back to Groq.",
-                settings.MODEL_PROVIDER,
-                str(e),
+                "Provider %s failed (%s). Trying Groq fallback.",
+                cfg.provider,
+                primary_error,
             )
-            try:
-                answer = _ask_groq(question, context_text, settings)
-                logger.info("Groq fallback succeeded. LLM responded (%d chars).", len(answer))
-                return answer
-            except Exception as groq_error:
-                logger.exception("Groq fallback also failed")
-                raise groq_error
-        else:
-            # No fallback available or already using Groq
-            logger.exception("LLM API call failed for provider %s", settings.MODEL_PROVIDER)
-            raise
+            fallback = EffectiveLLMConfig(
+                provider="groq",
+                model="llama-3.3-70b-versatile",
+                openai_api_key=cfg.openai_api_key,
+                anthropic_api_key=cfg.anthropic_api_key,
+                google_api_key=cfg.google_api_key,
+                groq_api_key=cfg.groq_api_key,
+                ollama_api_url=cfg.ollama_api_url,
+                ollama_timeout=cfg.ollama_timeout,
+            )
+            answer = _call_provider(fallback, question, context_text)
+            logger.info("Groq fallback succeeded (%d chars).", len(answer))
+            return answer
+        logger.exception("LLM failed for provider %s", cfg.provider)
+        raise

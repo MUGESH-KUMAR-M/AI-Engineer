@@ -7,6 +7,7 @@ import logging
 import requests
 from fastapi import APIRouter
 
+from backend.config.llm_config import get_effective_llm_config
 from backend.config.settings import get_settings
 from backend.rag.vector_store import VectorStore
 
@@ -20,8 +21,8 @@ def _check_ollama(base_url: str) -> dict:
         resp = requests.get(f"{base_url.rstrip('/')}/api/tags", timeout=3)
         resp.raise_for_status()
         models = [m.get("name", "") for m in resp.json().get("models", [])]
-        settings = get_settings()
-        model = settings.MODEL_NAME.replace("ollama-", "")
+        effective = get_effective_llm_config()
+        model = effective.model.replace("ollama-", "")
         available = any(model in m or m.startswith(model.split(":")[0]) for m in models)
         return {
             "online": True,
@@ -34,7 +35,7 @@ def _check_ollama(base_url: str) -> dict:
         return {
             "online": False,
             "models": [],
-            "configured_model": get_settings().MODEL_NAME,
+            "configured_model": get_effective_llm_config().model,
             "model_ready": False,
         }
 
@@ -43,6 +44,7 @@ def _check_ollama(base_url: str) -> dict:
 async def system_status() -> dict:
     """Return live status for vector DB, LLM, and RAG configuration."""
     settings = get_settings()
+    effective = get_effective_llm_config()
 
     try:
         store = VectorStore()
@@ -53,14 +55,22 @@ async def system_status() -> dict:
         vector_ok = False
 
     ollama_status = (
-        _check_ollama(settings.OLLAMA_API_URL)
-        if settings.MODEL_PROVIDER == "ollama"
+        _check_ollama(effective.ollama_api_url)
+        if effective.provider == "ollama"
         else None
     )
 
     llm_ready = True
-    if settings.MODEL_PROVIDER == "ollama" and ollama_status:
+    if effective.provider == "ollama" and ollama_status:
         llm_ready = ollama_status["online"] and ollama_status["model_ready"]
+    elif effective.provider in ("openai", "anthropic", "gemini", "groq"):
+        key_map = {
+            "openai": effective.openai_api_key,
+            "anthropic": effective.anthropic_api_key,
+            "gemini": effective.google_api_key,
+            "groq": effective.groq_api_key,
+        }
+        llm_ready = bool(key_map.get(effective.provider))
 
     return {
         "status": "ok" if vector_ok and chunk_count > 0 and llm_ready else "degraded",
@@ -73,8 +83,8 @@ async def system_status() -> dict:
             "top_k": settings.TOP_K,
         },
         "llm": {
-            "provider": settings.MODEL_PROVIDER,
-            "model": settings.MODEL_NAME,
+            "provider": effective.provider,
+            "model": effective.model,
             "ready": llm_ready,
         },
         "ollama": ollama_status,

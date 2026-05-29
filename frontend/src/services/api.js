@@ -33,3 +33,24 @@ export async function fetchIngestStatus() {
   }
   return response.json();
 }
+
+export async function fetchProviders() {
+  const response = await fetch(apiUrl('/api/providers'));
+  if (!response.ok) {
+    throw new Error('Could not load providers');
+  }
+  return response.json();
+}
+
+export async function configureProvider({ provider, model, api_key }) {
+  const response = await fetch(apiUrl('/api/providers/configure'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, model, api_key }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to save provider settings');
+  }
+  return response.json();
+}

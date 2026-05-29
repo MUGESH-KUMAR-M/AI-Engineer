@@ -5,6 +5,7 @@
 
 # ChromaDB persistent storage
 data/chroma_db/
+data/runtime_config.json
 
 # Python
 __pycache__/

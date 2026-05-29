@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { MessageSquare, Upload } from 'lucide-react';
 import Header from './components/Header';
+import SettingsPanel from './components/SettingsPanel';
 import ChatWindow from './components/ChatWindow';
 import ChatInput from './components/ChatInput';
 import DocumentUpload from './components/DocumentUpload';
@@ -16,6 +17,7 @@ export default function App() {
   const [systemStatus, setSystemStatus] = useState(null);
   const [ingestionStats, setIngestionStats] = useState(null);
   const [uploadedDocs, setUploadedDocs] = useState([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -103,7 +105,22 @@ export default function App() {
 
   return (
     <div className="app-container">
-      <Header systemStatus={systemStatus} />
+      <Header
+        systemStatus={systemStatus}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onConfigured={async () => {
+          try {
+            const status = await fetchSystemStatus();
+            setSystemStatus(status);
+          } catch {
+            /* ignore */
+          }
+        }}
+      />
 
       <nav className="tab-navigation" aria-label="Main navigation">
         <button
@@ -158,7 +175,9 @@ export default function App() {
                   </div>
                   <div className="stat-card highlight">
                     <span className="stat-value">RAG</span>
-                    <span className="stat-label">Chroma + Ollama</span>
+                    <span className="stat-label">
+                      {systemStatus?.llm?.provider || 'Chroma'} RAG
+                    </span>
                   </div>
                 </div>
               </div>

@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.chat import router as chat_router
+from backend.api.providers import router as providers_router
 from backend.api.status import router as status_router
 from backend.api.upload import router as upload_router
 
@@ -51,6 +52,7 @@ app.add_middleware(
 app.include_router(chat_router)
 app.include_router(upload_router)
 app.include_router(status_router)
+app.include_router(providers_router)
 
 
 # ---------------------------------------------------------------------------

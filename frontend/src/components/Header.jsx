@@ -1,51 +1,51 @@
-import { Cpu, Database, Sparkles } from 'lucide-react';
+import { Settings2, Sparkles } from 'lucide-react';
 
-export default function Header({ systemStatus }) {
-  const rag = systemStatus?.rag;
+const PROVIDER_LABELS = {
+  ollama: 'Ollama',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  gemini: 'Gemini',
+  groq: 'Groq',
+};
+
+export default function Header({ systemStatus, onOpenSettings }) {
   const llm = systemStatus?.llm;
-  const ollama = systemStatus?.ollama;
+  const rag = systemStatus?.rag;
 
-  const isOnline =
-    systemStatus?.status === 'ok' ||
-    (rag?.chunks > 0 && llm?.ready);
-
-  const statusLabel = isOnline
-    ? llm?.provider === 'ollama'
-      ? `Ollama · ${llm?.model || 'local'}`
-      : 'Online'
-    : 'Connecting…';
+  const providerName = PROVIDER_LABELS[llm?.provider] || llm?.provider || '…';
+  const isReady = llm?.ready && (rag?.chunks ?? 0) > 0;
 
   return (
-    <header className="header">
-      <div className="header-logo">
-        <Sparkles size={22} strokeWidth={2} />
-      </div>
-      <div className="header-text">
-        <div className="header-title">SWS AI Assistant</div>
-        <div className="header-subtitle">RAG-Powered Company Policy Chatbot</div>
-      </div>
-
-      <div className="header-metrics">
-        {rag && (
-          <div className="header-metric" title="Indexed document chunks">
-            <Database size={14} />
-            <span>{rag.chunks} chunks</span>
-          </div>
-        )}
-        {llm?.provider === 'ollama' && (
-          <div
-            className={`header-metric ${ollama?.model_ready ? 'ready' : 'warn'}`}
-            title="Local LLM via Ollama"
-          >
-            <Cpu size={14} />
-            <span>{ollama?.model_ready ? 'Ollama' : 'Ollama starting'}</span>
-          </div>
-        )}
+    <header className="app-header">
+      <div className="app-header-brand">
+        <div className="brand-mark">
+          <Sparkles size={20} strokeWidth={2.2} />
+        </div>
+        <div className="brand-copy">
+          <h1>SWS AI Assistant</h1>
+          <p>Company policy · RAG-powered answers</p>
+        </div>
       </div>
 
-      <div className={`header-status ${isOnline ? 'online' : 'offline'}`}>
-        <div className="header-status-dot" />
-        <span className="header-status-text">{statusLabel}</span>
+      <div className="app-header-actions">
+        {llm && (
+          <div className={`model-pill ${isReady ? 'ready' : 'pending'}`}>
+            <span className="model-pill-dot" />
+            <span className="model-pill-text">
+              {providerName} · {llm.model}
+            </span>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="settings-trigger"
+          onClick={onOpenSettings}
+          aria-label="Open model settings"
+        >
+          <Settings2 size={18} />
+          <span>Model</span>
+        </button>
       </div>
     </header>
   );
