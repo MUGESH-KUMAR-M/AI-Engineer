@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # Model Configuration
     CHROMA_PATH: str = "./data/chroma_db"
     TOP_K: int = 4
-    MODEL_NAME: str = "llama3"
+    MODEL_NAME: str = "phi3"
     MODEL_PROVIDER: str = "ollama"  # Options: openai, anthropic, gemini, groq, ollama
     EMBEDDING_PROVIDER: str = "huggingface"  # Options: openai, huggingface
     PDF_DIR: str = "./Docs"
