@@ -11,7 +11,7 @@ import {
   HardDrive,
   Trash2,
 } from 'lucide-react';
-import { uploadBulk, uploadSingle } from '../services/api';
+import { uploadFiles } from '../services/api';
 import './DocumentUpload.css';
 
 function formatSize(bytes) {
@@ -89,17 +89,15 @@ export default function DocumentUpload({ onUploadSuccess, ingestionStats }) {
     setError(null);
 
     try {
-      if (mode === 'single' && pendingFiles.length === 1) {
-        const data = await uploadSingle(pendingFiles[0]);
-        setResult({ type: 'single', data });
-        setPendingFiles([]);
-        onUploadSuccess?.(data);
-      } else {
-        const data = await uploadBulk(pendingFiles);
-        setResult({ type: 'bulk', data });
-        setPendingFiles([]);
-        onUploadSuccess?.({ filename: `${data.accepted} files`, bulk: true });
-      }
+      const data = await uploadFiles(pendingFiles);
+      const isBulk = pendingFiles.length > 1;
+      setResult({ type: isBulk ? 'bulk' : 'single', data });
+      setPendingFiles([]);
+      onUploadSuccess?.(
+        isBulk
+          ? { filename: `${data.accepted ?? pendingFiles.length} files`, bulk: true }
+          : data
+      );
     } catch (err) {
       setError(err.message || 'Upload failed');
     } finally {

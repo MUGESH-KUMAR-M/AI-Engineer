@@ -1,9 +1,13 @@
 """
-Document upload and ingestion API — single file and bulk optimized upload.
+Document upload API — single or bulk via POST /api/upload.
+
+Send one or more PDFs using form field ``file`` (repeat for multiple).
+Bulk uploads use one batched embed + Chroma upsert for speed.
 """
 
 import logging
 from pathlib import Path
+from typing import Union
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -16,28 +20,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _MAX_FILE_BYTES = 50 * 1024 * 1024
-_MAX_BULK_FILES = 20
+_MAX_FILES = 20
 
 
 class UploadResponse(BaseModel):
-    filename: str
+    filename: str = ""
     pages: int = 0
     chunks: int = 0
     message: str
-
-
-class BulkFileResult(BaseModel):
-    filename: str
-    pages: int = 0
-    chunks: int = 0
-    status: str
-    error: str | None = None
-
-
-class BulkUploadResponse(BaseModel):
-    accepted: int
-    files: list[BulkFileResult]
-    message: str
+    accepted: int = 1
+    files: list[dict] | None = None
 
 
 class IngestionStatus(BaseModel):
@@ -64,47 +56,26 @@ async def _save_upload(file: UploadFile, upload_dir: Path) -> tuple[str, str]:
     return str(dest), file.filename
 
 
-def _run_bulk_ingest(paths: list[tuple[str, str]]) -> None:
+def _run_ingest(paths: list[tuple[str, str]]) -> None:
     try:
         ingest_pdf_paths(paths)
     except Exception:
-        logger.exception("Bulk background ingest failed")
+        logger.exception("Background ingest failed")
 
 
 @router.post("/api/upload", response_model=UploadResponse)
-async def upload_document(
-    file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+async def upload_documents(
+    background_tasks: BackgroundTasks,
+    file: list[UploadFile] = File(..., description="One or more PDF files (same field name)"),
 ) -> UploadResponse:
-    """Upload and ingest a single PDF (background processing)."""
-    _validate_pdf(file)
-    settings = get_settings()
-    upload_dir = Path(settings.PDF_DIR)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    file_path, filename = await _save_upload(file, upload_dir)
-    logger.info("Single upload: %s", filename)
-
-    background_tasks.add_task(_run_bulk_ingest, [(file_path, filename)])
-
-    return UploadResponse(
-        filename=filename,
-        message=f"'{filename}' received. Processing in background…",
-    )
-
-
-@router.post("/api/upload/bulk", response_model=BulkUploadResponse)
-async def upload_bulk(
-    files: list[UploadFile] = File(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-) -> BulkUploadResponse:
-    """Upload multiple PDFs — one batched embed + Chroma upsert (faster than N singles)."""
-    if not files:
+    """Upload 1–20 PDFs. Multiple files are batch-indexed in one pass."""
+    if not file:
         raise HTTPException(status_code=400, detail="No files provided.")
-    if len(files) > _MAX_BULK_FILES:
+
+    if len(file) > _MAX_FILES:
         raise HTTPException(
             status_code=400,
-            detail=f"Maximum {_MAX_BULK_FILES} files per bulk upload.",
+            detail=f"Maximum {_MAX_FILES} files per upload.",
         )
 
     settings = get_settings()
@@ -112,22 +83,40 @@ async def upload_bulk(
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     saved: list[tuple[str, str]] = []
-    results: list[BulkFileResult] = []
+    file_list: list[dict] = []
 
-    for file in files:
-        _validate_pdf(file)
-        file_path, filename = await _save_upload(file, upload_dir)
-        saved.append((file_path, filename))
-        results.append(BulkFileResult(filename=filename, status="queued"))
-        logger.info("Bulk queued: %s", filename)
+    for f in file:
+        _validate_pdf(f)
+        path, name = await _save_upload(f, upload_dir)
+        saved.append((path, name))
+        file_list.append({"filename": name, "status": "queued"})
+        logger.info("Upload queued: %s", name)
 
-    background_tasks.add_task(_run_bulk_ingest, saved)
+    background_tasks.add_task(_run_ingest, saved)
 
-    return BulkUploadResponse(
+    if len(saved) == 1:
+        return UploadResponse(
+            filename=saved[0][1],
+            accepted=1,
+            message=f"'{saved[0][1]}' received. Processing in background…",
+        )
+
+    return UploadResponse(
+        filename=f"{len(saved)} files",
         accepted=len(saved),
-        files=results,
-        message=f"{len(saved)} file(s) queued. Optimized batch indexing started.",
+        files=file_list,
+        message=f"{len(saved)} file(s) queued. Batch indexing started.",
     )
+
+
+# Alias for older clients / docs
+@router.post("/api/upload/bulk", response_model=UploadResponse)
+async def upload_bulk_alias(
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(..., description="PDF files"),
+) -> UploadResponse:
+    """Alias: same as POST /api/upload with multiple files."""
+    return await upload_documents(background_tasks=background_tasks, file=files)
 
 
 @router.get("/api/ingest-status", response_model=IngestionStatus)

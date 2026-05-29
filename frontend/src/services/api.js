@@ -42,34 +42,65 @@ export async function fetchProviders() {
   return response.json();
 }
 
-export async function uploadSingle(file) {
+/** Upload one or more PDFs — always POST /api/upload with field name ``file`` */
+export async function uploadFiles(files) {
+  const list = Array.isArray(files) ? files : [files];
   const formData = new FormData();
-  formData.append('file', file);
-  const response = await fetch(apiUrl('/api/upload'), {
+  for (const f of list) {
+    formData.append('file', f);
+  }
+
+  let response = await fetch(apiUrl('/api/upload'), {
     method: 'POST',
     body: formData,
   });
+
+  // Fallback: try legacy bulk path if unified route missing (old server)
+  if (response.status === 404 && list.length > 1) {
+    const bulkForm = new FormData();
+    for (const f of list) {
+      bulkForm.append('files', f);
+    }
+    response = await fetch(apiUrl('/api/upload/bulk'), {
+      method: 'POST',
+      body: bulkForm,
+    });
+  }
+
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || 'Upload failed');
+    const detail = err.detail;
+    const msg = Array.isArray(detail)
+      ? detail.map((d) => d.msg || d).join(', ')
+      : detail || 'Upload failed';
+    throw new Error(msg);
   }
-  return response.json();
+
+  const data = await response.json();
+
+  // Normalize bulk shape for UI
+  if (list.length > 1 && !data.files) {
+    return {
+      accepted: data.accepted || list.length,
+      files: list.map((f) => ({ filename: f.name, status: 'queued' })),
+      message: data.message,
+    };
+  }
+
+  return data;
+}
+
+export async function uploadSingle(file) {
+  return uploadFiles([file]);
 }
 
 export async function uploadBulk(files) {
-  const formData = new FormData();
-  for (const file of files) {
-    formData.append('files', file);
-  }
-  const response = await fetch(apiUrl('/api/upload/bulk'), {
-    method: 'POST',
-    body: formData,
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || 'Bulk upload failed');
-  }
-  return response.json();
+  const data = await uploadFiles(files);
+  return {
+    accepted: data.accepted || files.length,
+    files: data.files || files.map((f) => ({ filename: f.name, status: 'queued' })),
+    message: data.message,
+  };
 }
 
 export async function configureProvider({ provider, model, api_key }) {

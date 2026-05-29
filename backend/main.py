@@ -21,8 +21,8 @@ from backend.api.providers import (
 from backend.api.status import router as status_router
 from backend.api.upload import (
     router as upload_router,
-    upload_bulk,
-    upload_document,
+    upload_bulk_alias,
+    upload_documents,
 )
 
 # ---------------------------------------------------------------------------
@@ -70,8 +70,8 @@ app.add_api_route(
     methods=["POST"],
     tags=["providers"],
 )
-app.add_api_route("/api/upload", upload_document, methods=["POST"], tags=["upload"])
-app.add_api_route("/api/upload/bulk", upload_bulk, methods=["POST"], tags=["upload"])
+app.add_api_route("/api/upload", upload_documents, methods=["POST"], tags=["upload"])
+app.add_api_route("/api/upload/bulk", upload_bulk_alias, methods=["POST"], tags=["upload"])
 
 
 # ---------------------------------------------------------------------------
