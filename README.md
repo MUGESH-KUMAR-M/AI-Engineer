@@ -12,56 +12,58 @@ A **production-ready Retrieval-Augmented Generation (RAG)** chatbot that lets em
 
 ---
 
-## 🎯 Quick Start (3 Minutes)
+## 🎯 Quick Start (Local Ollama Setup)
 
 ### Prerequisites
-- Python 3.9+
-- Node.js 16+
-- One LLM API key (Gemini, Groq, Claude, or OpenAI) — **or use local Ollama**
+- **Python 3.11+**
+- **Node.js 18+**
+- **Ollama** installed with at least one local model (`phi3:latest` recommended)
 
-### Setup
+### Project Setup
 
 ```bash
 cd e:\AI-Engineer
 
-# 1. Activate venv & install dependencies
+# 1. (Optional) Create & activate venv
+python -m venv venv
 .\venv\Scripts\Activate.ps1
+
+# 2. Install Python dependencies
 pip install -r requirements.txt
 
-# 2. Already done: Documents are ingested & vector DB is ready
-# (Vector embeddings stored in data/chroma_db/)
-
-# 3. Start backend (Terminal 1)
-uvicorn backend.main:app --reload
-
-# 4. Start frontend (Terminal 2)
-cd frontend && npm run dev
-
-# 5. Open browser
-http://localhost:5173
+# 3. Install frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
 **Done! 🎉** Upload PDFs, ask questions, get answers with sources!
 
 ---
 
-## 📋 Current Configuration
+## 📋 Current Configuration (Default)
 
-**Embeddings:** HuggingFace `sentence-transformers/all-MiniLM-L6-v2` (Local, no API key)  
-**LLM:** Gemini 2.0 Flash + Groq backup
+- **Embeddings:** HuggingFace `sentence-transformers/all-MiniLM-L6-v2` (local, no API key)  
+- **Vector DB:** ChromaDB (local, `data/chroma_db/`)  
+- **LLM:** Ollama `phi3` via `MODEL_PROVIDER=ollama`  
+- **PDF directory:** `./Docs` (10 SWS AI PDFs)
 
-Set in `.env`:
-```
+Key `.env` values (already set in this repo, but you can adjust):
+
+```env
 EMBEDDING_PROVIDER=huggingface
-MODEL_PROVIDER=gemini
-GOOGLE_API_KEY=your-key
+MODEL_PROVIDER=ollama
+MODEL_NAME=phi3
+OLLAMA_API_URL=http://localhost:11434
+TOP_K=4
+PDF_DIR=./Docs
 ```
 
 ---
 
 ## 📊 Project Structure
 
-```
+````
 AI-Engineer/
 ├── .env.example              # Environment variable template
 ├── .gitignore                 # Git ignore rules
@@ -118,21 +120,14 @@ AI-Engineer/
 │           └── api.js         # Fetch wrapper for /api/chat
 └── data/
     └── chroma_db/             # ChromaDB persistent storage (auto-created)
-###
-```
+
+````
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Detailed Setup & Run Commands
 
-### Prerequisites
-
-- **Python 3.11+**
-- **Node.js 18+**
-- **OpenAI API key** (for embeddings)
-- **Anthropic API key** (for Claude LLM)
-
-### 1. Clone & Setup Environment
+### 1. Clone & backend setup
 
 ```bash
 git clone <your-repo-url>
@@ -147,19 +142,18 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 2. Configure API Keys
+### 2. Configure environment
 
 ```bash
 # Copy the example env file
 copy .env.example .env        # Windows
 # cp .env.example .env        # macOS/Linux
 
-# Edit .env and add your real API keys:
-# ANTHROPIC_API_KEY=sk-ant-...
-# OPENAI_API_KEY=sk-...
+# Default is local Ollama (no cloud keys required).
+# Optional: set OpenAI / Groq / Anthropic / Gemini keys if you want to switch providers.
 ```
 
-### 3. Ingest Documents
+### 3. Ingest documents into Chroma
 
 ```bash
 # This loads all 10 PDFs, chunks them, generates embeddings,
@@ -180,21 +174,24 @@ Step 4/4: Storing in ChromaDB …
 Ingestion complete ✓
 ```
 
-### 4. Start the Backend
+### 4. Start the backend (FastAPI)
 
 ```bash
-uvicorn backend.main:app --reload
-# Server runs at http://localhost:8000
-# Health check: http://localhost:8000/api/health
+uvicorn backend.main:app --reload --host 127.0.0.1 --port 8010
+# API:       http://127.0.0.1:8010
+# Health:    GET  /api/health
+# Chat:      POST /api/chat
+# Status:    GET  /api/status
+# Ingest:    GET  /api/ingest-status
 ```
 
-### 5. Start the Frontend
+### 5. Start the frontend (React + Vite)
 
 ```bash
 cd frontend
 npm install
-npm run dev
-# UI runs at http://localhost:5173
+npm run dev -- --host 127.0.0.1 --port 5173
+# UI: http://127.0.0.1:5173  (proxied to backend on :8010)
 ```
 
 ### 6. Open the App
@@ -253,7 +250,8 @@ Response: {
 | **Backend** | Python 3.11+, FastAPI |
 | **Embeddings** | HuggingFace `all-MiniLM-L6-v2` (local) or OpenAI `text-embedding-3-small` |
 | **Vector Store** | ChromaDB (persistent local) |
-| **LLM** | Groq `llama-3.3-70b-versatile` (also supports Claude, Gemini, OpenAI, Ollama) |
+| **LLM (default)** | Ollama `phi3` (local, no API key) |
+| **LLM (optional)** | Groq / OpenAI / Anthropic / Gemini via `.env` switches |
 | **PDF Parsing** | PyMuPDF (fitz) |
 | **Text Splitting** | LangChain `RecursiveCharacterTextSplitter` |
 
@@ -295,9 +293,23 @@ The system prompt instructs the model to:
 
 Context is formatted as `[1] (Source: file.pdf, Page N)\n<text>` so the model can attribute sources; the API also returns structured `sources` for the UI chips.
 
-### LLM: Groq (Llama 3.3 70B)
+### LLM: Local Ollama (phi3) + pluggable providers
 
-Fast, free-tier friendly for demos. Swap via `.env`: `MODEL_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`, or `ollama` for fully local inference.
+- **Default:** `MODEL_PROVIDER=ollama`, `MODEL_NAME=phi3` (runs fully local via Ollama)
+- **Switching provider:** update `.env` to e.g.:
+  - `MODEL_PROVIDER=groq`, `MODEL_NAME=llama-3.3-70b-versatile`, `GROQ_API_KEY=...`
+  - `MODEL_PROVIDER=openai`, `MODEL_NAME=gpt-4.1-mini`, `OPENAI_API_KEY=...`
+  - `MODEL_PROVIDER=anthropic`, `MODEL_NAME=claude-3.7-sonnet`, `ANTHROPIC_API_KEY=...`
+- The RAG pipeline (`backend/rag/pipeline.py`) does not change when swapping LLMs.
+
+---
+
+## 🧩 Assumptions & Notes
+
+- **Docs folder:** The 10 SWS AI PDFs live under `Docs/` and are treated as the single source of truth.
+- **Grounded answers:** If relevant chunks are not found or are too far in vector space, the LLM is instructed to reply: *“I don't have that information in the company documents.”*
+- **Local-first:** Default configuration assumes **no cloud API keys** and runs everything locally (HuggingFace embeddings + Ollama LLM + ChromaDB).
+- **Ports:** Backend on `8010`, frontend on `5173`, with Vite dev proxy pointing `/api` to the backend.
 
 ---
 
